@@ -11,13 +11,36 @@ import kotlinx.coroutines.launch
 import java.io.File
 import androidx.compose.runtime.mutableStateListOf
 
-class FileBrowserViewModel(private val repository: FileRepository) : ViewModel() {
+import com.example.data.SettingsRepository
+
+class FileBrowserViewModel(
+    private val repository: FileRepository,
+    private val settingsRepository: SettingsRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FileBrowserUiState(currentPath = repository.getRootPath()))
     val uiState: StateFlow<FileBrowserUiState> = _uiState.asStateFlow()
 
     private val _favorites = MutableStateFlow(repository.getFavorites())
     val favorites: StateFlow<Set<String>> = _favorites.asStateFlow()
+
+    private val _isGridView = MutableStateFlow(settingsRepository.isGridView)
+    val isGridView: StateFlow<Boolean> = _isGridView.asStateFlow()
+
+    private val _sortBy = MutableStateFlow(settingsRepository.sortBy)
+    val sortBy: StateFlow<Int> = _sortBy.asStateFlow()
+
+    fun toggleGridView() {
+        val newVal = !settingsRepository.isGridView
+        settingsRepository.isGridView = newVal
+        _isGridView.value = newVal
+    }
+
+    fun updateSortBy(sort: Int) {
+        settingsRepository.sortBy = sort
+        _sortBy.value = sort
+        reloadCurrentDirectory()
+    }
 
     init {
         loadDirectory(repository.getRootPath())
@@ -28,10 +51,20 @@ class FileBrowserViewModel(private val repository: FileRepository) : ViewModel()
             _uiState.value = _uiState.value.copy(isLoading = true, currentPath = path, errorMessage = null)
             val result = repository.getFiles(path)
             result.onSuccess { files ->
+                val showHidden = settingsRepository.showHiddenFiles
+                var processedFiles = if (showHidden) files else files.filter { !it.name.startsWith(".") }
+                
+                processedFiles = when (settingsRepository.sortBy) {
+                    0 -> processedFiles.sortedWith(compareBy<FileItem> { !it.isDirectory }.thenBy { it.name.lowercase() })
+                    1 -> processedFiles.sortedWith(compareBy<FileItem> { !it.isDirectory }.thenBy { it.size })
+                    2 -> processedFiles.sortedWith(compareBy<FileItem> { !it.isDirectory }.thenBy { it.lastModified })
+                    else -> processedFiles.sortedWith(compareBy<FileItem> { !it.isDirectory }.thenBy { it.name.lowercase() })
+                }
+                
                 val breadcrumbs = generateBreadcrumbs(path)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    files = files,
+                    files = processedFiles,
                     breadcrumbs = breadcrumbs
                 )
             }.onFailure { error ->
@@ -144,6 +177,9 @@ class FileBrowserViewModel(private val repository: FileRepository) : ViewModel()
             reloadCurrentDirectory()
         }
     }
+
+    fun getGitToken(): String = settingsRepository.gitToken
+    fun updateGitToken(token: String) { settingsRepository.gitToken = token }
 
     fun toggleFavorite(path: String) {
         repository.toggleFavorite(path)

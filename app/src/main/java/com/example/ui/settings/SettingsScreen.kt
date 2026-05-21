@@ -13,14 +13,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onNavigateBack: () -> Unit) {
-    var isDarkTheme by remember { mutableStateOf(true) }
-    var useSystemTheme by remember { mutableStateOf(false) }
-    var showHiddenFiles by remember { mutableStateOf(true) }
-    var highContrastCode by remember { mutableStateOf(true) }
+fun SettingsScreen(viewModel: SettingsViewModel, onNavigateBack: () -> Unit) {
+    val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+    val useSystemTheme by viewModel.useSystemTheme.collectAsState()
+    val showHiddenFiles by viewModel.showHiddenFiles.collectAsState()
+    val highContrastCode by viewModel.highContrastCode.collectAsState()
+    val gitToken by viewModel.gitToken.collectAsState()
+    val gitUsername by viewModel.gitUsername.collectAsState()
+
+    var showGitDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -52,7 +57,7 @@ fun SettingsScreen(onNavigateBack: () -> Unit) {
                     title = "Use System Theme",
                     subtitle = "Follow system dark/light settings",
                     checked = useSystemTheme,
-                    onCheckedChange = { useSystemTheme = it }
+                    onCheckedChange = { viewModel.updateUseSystemTheme(it) }
                 )
             }
             item {
@@ -62,7 +67,7 @@ fun SettingsScreen(onNavigateBack: () -> Unit) {
                     subtitle = "Always use the sophisticated dark theme",
                     checked = isDarkTheme,
                     enabled = !useSystemTheme,
-                    onCheckedChange = { isDarkTheme = it }
+                    onCheckedChange = { viewModel.updateIsDarkTheme(it) }
                 )
             }
 
@@ -73,14 +78,7 @@ fun SettingsScreen(onNavigateBack: () -> Unit) {
                     title = "Show Hidden Files",
                     subtitle = "Display files starting with a dot",
                     checked = showHiddenFiles,
-                    onCheckedChange = { showHiddenFiles = it }
-                )
-            }
-            item {
-                SettingsActionItem(
-                    icon = Icons.Filled.Sort,
-                    title = "Default Sorting",
-                    subtitle = "Folders first, alphabetical"
+                    onCheckedChange = { viewModel.updateShowHiddenFiles(it) }
                 )
             }
             
@@ -91,15 +89,59 @@ fun SettingsScreen(onNavigateBack: () -> Unit) {
                     title = "High Contrast Syntax",
                     subtitle = "Use vivid colors for code highlighting",
                     checked = highContrastCode,
-                    onCheckedChange = { highContrastCode = it }
+                    onCheckedChange = { viewModel.updateHighContrastCode(it) }
                 )
             }
             item {
+                val fontSize by viewModel.fontSize.collectAsState()
+                var showFontSizeDialog by remember { mutableStateOf(false) }
+                
                 SettingsActionItem(
                     icon = Icons.Filled.TextFormat,
                     title = "Font Size",
-                    subtitle = "14 sp"
+                    subtitle = "$fontSize sp",
+                    onClick = { showFontSizeDialog = true }
                 )
+
+                if (showFontSizeDialog) {
+                    var currentSize by remember { mutableStateOf(fontSize.toFloat()) }
+                    AlertDialog(
+                        onDismissRequest = { showFontSizeDialog = false },
+                        title = { Text("Font Size") },
+                        text = {
+                            Column {
+                                Text("Select text size for the editor")
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("10", modifier = Modifier.padding(end = 8.dp))
+                                    Slider(
+                                        value = currentSize,
+                                        onValueChange = { currentSize = it },
+                                        valueRange = 10f..30f,
+                                        steps = 20,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text("30", modifier = Modifier.padding(start = 8.dp))
+                                }
+                                Text(
+                                    text = "Preview Text",
+                                    fontSize = currentSize.toInt().dp.value.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    modifier = Modifier.padding(top = 16.dp).align(Alignment.CenterHorizontally)
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                viewModel.updateFontSize(currentSize.toInt())
+                                showFontSizeDialog = false
+                            }) { Text("Save") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showFontSizeDialog = false }) { Text("Cancel") }
+                        }
+                    )
+                }
             }
 
             item { SettingsSectionHeader("Git & Security", modifier = Modifier.padding(top = 16.dp)) }
@@ -107,17 +149,56 @@ fun SettingsScreen(onNavigateBack: () -> Unit) {
                 SettingsActionItem(
                     icon = Icons.Filled.AccountCircle,
                     title = "GitHub Account",
-                    subtitle = "Not connected"
-                )
-            }
-            item {
-                SettingsActionItem(
-                    icon = Icons.Filled.Lock,
-                    title = "Manage Encryption Keys",
-                    subtitle = "Used for encrypting files and archives"
+                    subtitle = if (gitUsername.isNotBlank()) "Connected as $gitUsername" else "Not connected",
+                    onClick = { showGitDialog = true }
                 )
             }
         }
+    }
+
+    if (showGitDialog) {
+        var inputUsername by remember { mutableStateOf(gitUsername) }
+        var inputToken by remember { mutableStateOf(gitToken) }
+
+        AlertDialog(
+            onDismissRequest = { showGitDialog = false },
+            title = { Text("GitHub Authentication") },
+            text = {
+                Column {
+                    Text("Enter your GitHub username and personal access token (PAT).")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = inputUsername,
+                        onValueChange = { inputUsername = it },
+                        label = { Text("Username") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = inputToken,
+                        onValueChange = { inputToken = it },
+                        label = { Text("Personal Access Token") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.updateGitUsername(inputUsername)
+                    viewModel.updateGitToken(inputToken)
+                    showGitDialog = false
+                }) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGitDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

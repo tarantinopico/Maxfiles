@@ -34,7 +34,20 @@ class MainActivity : ComponentActivity() {
     
     enableEdgeToEdge()
     setContent {
-      MaxFilesTheme {
+      var useSystemTheme by remember { mutableStateOf(appContainer.settingsRepository.useSystemTheme) }
+      var isDarkTheme by remember { mutableStateOf(appContainer.settingsRepository.isDarkTheme) }
+      
+      val prefs = applicationContext.getSharedPreferences("max_files_settings", android.content.Context.MODE_PRIVATE)
+      DisposableEffect(prefs) {
+          val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+              if (key == "useSystemTheme") useSystemTheme = appContainer.settingsRepository.useSystemTheme
+              if (key == "isDarkTheme") isDarkTheme = appContainer.settingsRepository.isDarkTheme
+          }
+          prefs.registerOnSharedPreferenceChangeListener(listener)
+          onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+      }
+
+      MaxFilesTheme(useSystemTheme = useSystemTheme, forceDarkTheme = isDarkTheme) {
           var hasPermission by remember { mutableStateOf(checkStoragePermission()) }
           
           if (hasPermission) {

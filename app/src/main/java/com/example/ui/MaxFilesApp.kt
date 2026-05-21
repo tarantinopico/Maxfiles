@@ -54,7 +54,7 @@ fun MaxFilesApp(appContainer: AppContainer) {
                 EditorScreen(path, viewModel(factory = factory), onNavigateBack = { navController.popBackStack() }) 
             }
             composable(Screen.Settings.route) {
-                SettingsScreen(onNavigateBack = { navController.popBackStack() })
+                SettingsScreen(viewModel = viewModel(factory = factory), onNavigateBack = { navController.popBackStack() })
             }
             composable(Screen.About.route) {
                 AboutScreen(onNavigateBack = { navController.popBackStack() })

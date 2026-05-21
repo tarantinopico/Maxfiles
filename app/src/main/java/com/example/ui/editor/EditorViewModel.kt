@@ -8,10 +8,18 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class EditorViewModel(private val repository: FileRepository) : ViewModel() {
+import com.example.data.SettingsRepository
+
+class EditorViewModel(
+    private val repository: FileRepository,
+    private val settingsRepository: SettingsRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
+
+    val fontSize: Int get() = settingsRepository.fontSize
+    val highContrastCode: Boolean get() = settingsRepository.highContrastCode
 
     private val history = mutableListOf<String>()
     private var historyIndex = -1

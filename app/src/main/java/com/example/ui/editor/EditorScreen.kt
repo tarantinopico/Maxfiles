@@ -43,6 +43,8 @@ fun EditorScreen(
     val uiState by viewModel.uiState.collectAsState()
     val verticalScrollState = rememberScrollState()
     val horizontalScrollState = rememberScrollState()
+    var isSearchExpanded by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(path) {
         if (uiState.currentPath != path) {
@@ -89,6 +91,10 @@ fun EditorScreen(
             
             Spacer(modifier = Modifier.weight(1f))
             
+            IconButton(onClick = { isSearchExpanded = !isSearchExpanded }) {
+                Icon(Icons.Filled.Search, contentDescription = "Find", tint = SophisticatedTextMuted, modifier = Modifier.size(20.dp))
+            }
+
             IconButton(onClick = { viewModel.undo() }, enabled = uiState.canUndo) {
                 Icon(Icons.Filled.Undo, contentDescription = "Undo", tint = if (uiState.canUndo) SophisticatedText else SophisticatedTextMuted.copy(alpha=0.5f), modifier = Modifier.size(20.dp))
             }
@@ -101,9 +107,14 @@ fun EditorScreen(
                     Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = SophisticatedTextMuted, modifier = Modifier.size(20.dp))
                 }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    DropdownMenuItem(text = { Text("Find and Replace") }, onClick = { expanded = false })
-                    DropdownMenuItem(text = { Text("Format Document") }, onClick = { expanded = false })
-                    DropdownMenuItem(text = { Text("Go to Line") }, onClick = { expanded = false })
+                    DropdownMenuItem(text = { Text("Clear Content") }, onClick = { 
+                        viewModel.updateContent("") 
+                        expanded = false 
+                    })
+                    DropdownMenuItem(text = { Text("Revert to Saved") }, onClick = { 
+                        viewModel.loadFile(path)
+                        expanded = false 
+                    })
                 }
             }
             
@@ -115,6 +126,36 @@ fun EditorScreen(
         }
         
         HorizontalDivider(color = SophisticatedSurfaceVariant, thickness = 1.dp)
+
+        if (isSearchExpanded) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(EditorBackground)
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Find...") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = SophisticatedSurface,
+                        unfocusedContainerColor = SophisticatedSurface,
+                        focusedBorderColor = SophisticatedPrimary,
+                        unfocusedBorderColor = SophisticatedSurfaceVariant
+                    ),
+                    textStyle = TextStyle(color = SophisticatedText)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(onClick = { isSearchExpanded = false; searchQuery = "" }) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close search", tint = SophisticatedTextMuted)
+                }
+            }
+            HorizontalDivider(color = SophisticatedSurfaceVariant, thickness = 1.dp)
+        }
 
         if (uiState.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -134,6 +175,10 @@ fun EditorScreen(
                 ) {
                     // Line numbers inside the scroll so they stay perfectly in sync
                     val lineCount = uiState.content.count { it == '\n' } + 1
+                    val fontSizeSp = viewModel.fontSize.sp
+                    val lineHeightSp = (viewModel.fontSize * 1.5).sp
+                    val lineHeightDp = with(androidx.compose.ui.platform.LocalDensity.current) { lineHeightSp.toDp() }
+                    
                     Column(
                         modifier = Modifier
                             .background(SophisticatedSurface)
@@ -151,9 +196,9 @@ fun EditorScreen(
                                 Text(
                                     text = i.toString(),
                                     color = EditorLineNumber,
-                                    fontSize = 14.sp,
+                                    fontSize = fontSizeSp,
                                     fontFamily = FontFamily.Monospace,
-                                    modifier = Modifier.height(20.dp) // Exact match to BasicTextField line height
+                                    modifier = Modifier.height(lineHeightDp) // Exact match to BasicTextField line height
                                 )
                             }
                         }
@@ -165,12 +210,14 @@ fun EditorScreen(
                         onValueChange = { viewModel.updateContent(it) },
                         textStyle = TextStyle(
                             color = SophisticatedText,
-                            fontSize = 14.sp,
+                            fontSize = fontSizeSp,
                             fontFamily = FontFamily.Monospace,
-                            lineHeight = 20.sp
+                            lineHeight = lineHeightSp
                         ),
                         cursorBrush = SolidColor(SophisticatedPrimary),
-                        visualTransformation = SyntaxHighlightTransformation(),
+                        visualTransformation = if (viewModel.highContrastCode || searchQuery.isNotEmpty()) {
+                             SyntaxHighlightTransformation(viewModel.highContrastCode, searchQuery)
+                        } else VisualTransformation.None,
                         modifier = Modifier
                             .weight(1f)
                             .background(EditorBackground)
@@ -205,34 +252,46 @@ fun EditorScreen(
     }
 }
 
-class SyntaxHighlightTransformation : VisualTransformation {
+class SyntaxHighlightTransformation(
+    private val useHighContrast: Boolean = true,
+    private val searchQuery: String = ""
+) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val annotatedString = buildAnnotatedString {
             append(text.text)
             
-            // Very basic Regex regex for demo premium look
-            // Keywords
-            val keywordPattern = "\\b(fun|val|var|class|interface|object|if|else|when|return|true|false|null|import|package)\\b".toRegex()
-            keywordPattern.findAll(text.text).forEach { result ->
-                addStyle(SpanStyle(color = SophisticatedPrimary), result.range.first, result.range.last + 1)
+            if (useHighContrast) {
+                // Very basic Regex regex for demo premium look
+                // Keywords
+                val keywordPattern = "\\b(fun|val|var|class|interface|object|if|else|when|return|true|false|null|import|package)\\b".toRegex()
+                keywordPattern.findAll(text.text).forEach { result ->
+                    addStyle(SpanStyle(color = SophisticatedPrimary), result.range.first, result.range.last + 1)
+                }
+                
+                // Strings
+                val stringPattern = "\".*?\"".toRegex()
+                stringPattern.findAll(text.text).forEach { result ->
+                    addStyle(SpanStyle(color = Color(0xFFCE9178)), result.range.first, result.range.last + 1) // VS Code Orange String Color
+                }
+                
+                // Annotations
+                val annotationPattern = "@[a-zA-Z_0-9]+".toRegex()
+                annotationPattern.findAll(text.text).forEach { result ->
+                    addStyle(SpanStyle(color = Color(0xFFDCDCAA)), result.range.first, result.range.last + 1) // VS Code Yellow Function/Annotation Color
+                }
+                
+                // Comments (Basic single line) //
+                val commentPattern = "//.*".toRegex()
+                commentPattern.findAll(text.text).forEach { result ->
+                    addStyle(SpanStyle(color = Color(0xFF6A9955)), result.range.first, result.range.last + 1) // VS Code Green Comment
+                }
             }
             
-            // Strings
-            val stringPattern = "\".*?\"".toRegex()
-            stringPattern.findAll(text.text).forEach { result ->
-                addStyle(SpanStyle(color = Color(0xFFCE9178)), result.range.first, result.range.last + 1) // VS Code Orange String Color
-            }
-            
-            // Annotations
-            val annotationPattern = "@[a-zA-Z_0-9]+".toRegex()
-            annotationPattern.findAll(text.text).forEach { result ->
-                addStyle(SpanStyle(color = Color(0xFFDCDCAA)), result.range.first, result.range.last + 1) // VS Code Yellow Function/Annotation Color
-            }
-            
-            // Comments (Basic single line) //
-            val commentPattern = "//.*".toRegex()
-            commentPattern.findAll(text.text).forEach { result ->
-                addStyle(SpanStyle(color = Color(0xFF6A9955)), result.range.first, result.range.last + 1) // VS Code Green Comment
+            if (searchQuery.isNotEmpty()) {
+                val searchRegex = Regex.escape(searchQuery).toRegex(RegexOption.IGNORE_CASE)
+                searchRegex.findAll(text.text).forEach { result ->
+                    addStyle(SpanStyle(background = Color(0xFFFBC02D).copy(alpha = 0.5f), color = Color.Black), result.range.first, result.range.last + 1)
+                }
             }
         }
         return TransformedText(annotatedString, OffsetMapping.Identity)

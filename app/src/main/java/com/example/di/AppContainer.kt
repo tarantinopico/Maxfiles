@@ -7,4 +7,7 @@ class AppContainer(private val context: Context) {
     val fileRepository: FileRepository by lazy {
         FileRepository(context)
     }
+    val settingsRepository: com.example.data.SettingsRepository by lazy {
+        com.example.data.SettingsRepository(context)
+    }
 }

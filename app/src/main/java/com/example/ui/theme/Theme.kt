@@ -24,17 +24,29 @@ private val DarkColorScheme = darkColorScheme(
     error = SophisticatedError
 )
 
-private val LightColorScheme = DarkColorScheme // Enforce dark theme
-
+private val LightColorScheme = lightColorScheme(
+    primary = Color(0xFF005AC1),
+    onPrimary = Color(0xFFFFFFFF),
+    secondary = Color(0xFF535F70),
+    background = Color(0xFFFDFBFF),
+    surface = Color(0xFFFDFBFF),
+    surfaceVariant = Color(0xFFE0E2EC),
+    onBackground = Color(0xFF1A1C1E),
+    onSurface = Color(0xFF1A1C1E),
+    onSurfaceVariant = Color(0xFF43474E),
+    error = Color(0xFFBA1A1A)
+)
 
 @Composable
 fun MaxFilesTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
+  useSystemTheme: Boolean = false,
+  forceDarkTheme: Boolean = true,
   // Dynamic color is available on Android 12+
   dynamicColor: Boolean = true,
   content: @Composable () -> Unit,
 ) {
-  val colorScheme = DarkColorScheme
+  val darkTheme = if (useSystemTheme) isSystemInDarkTheme() else forceDarkTheme
+  val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
   MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
 }

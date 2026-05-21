@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
@@ -96,12 +97,30 @@ fun FileBrowserScreen(
                     Spacer(modifier = Modifier.weight(1f))
                     
                     // Quick Action Icons
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (viewModel.hasClipboard) {
                             IconButton(onClick = { viewModel.pasteFiles() }, modifier = Modifier.size(36.dp)) {
                                 Icon(Icons.Filled.ContentPaste, contentDescription = "Paste", tint = MaterialTheme.colorScheme.primary)
                             }
                         }
+                        
+                        var sortExpanded by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { sortExpanded = true }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Filled.Sort, contentDescription = "Sort", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
+                                DropdownMenuItem(text = { Text("Name") }, onClick = { viewModel.updateSortBy(0); sortExpanded = false })
+                                DropdownMenuItem(text = { Text("Size") }, onClick = { viewModel.updateSortBy(1); sortExpanded = false })
+                                DropdownMenuItem(text = { Text("Date") }, onClick = { viewModel.updateSortBy(2); sortExpanded = false })
+                            }
+                        }
+
+                        val isGrid by viewModel.isGridView.collectAsState()
+                        IconButton(onClick = { viewModel.toggleGridView() }, modifier = Modifier.size(36.dp)) {
+                            Icon(if (isGrid) Icons.Filled.ViewList else Icons.Filled.GridView, contentDescription = "Toggle View", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
                         IconButton(onClick = { showSearch = !showSearch }, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Filled.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -151,30 +170,64 @@ fun FileBrowserScreen(
                         if (displayFiles.isEmpty()) {
                             EmptyFolderView()
                         } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(bottom = 88.dp)
-                            ) {
-                                items(displayFiles, key = { it.path }) { fileItem ->
-                                    val isSelected = selectedFiles.contains(fileItem.path)
-                                    CompactFileRow(
-                                        fileItem = fileItem,
-                                        isSelected = isSelected,
-                                        isSelectionMode = isSelectionMode,
-                                        onClick = {
-                                            if (isSelectionMode) {
-                                                val newSel = selectedFiles.toMutableSet()
-                                                if (newSel.contains(fileItem.path)) newSel.remove(fileItem.path) else newSel.add(fileItem.path)
-                                                selectedFiles = newSel
-                                            } else {
-                                                if (fileItem.isDirectory) viewModel.loadDirectory(fileItem.path)
-                                                else onNavigateToEditor(fileItem.path)
+                            val isGrid by viewModel.isGridView.collectAsState()
+                            if (isGrid) {
+                                androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                                    columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    items(count = displayFiles.size, key = { displayFiles[it].path }) { index ->
+                                        val fileItem = displayFiles[index]
+                                        val isSelected = selectedFiles.contains(fileItem.path)
+                                        GridFileRow(
+                                            fileItem = fileItem,
+                                            isSelected = isSelected,
+                                            isSelectionMode = isSelectionMode,
+                                            onClick = {
+                                                if (isSelectionMode) {
+                                                    val newSel = selectedFiles.toMutableSet()
+                                                    if (newSel.contains(fileItem.path)) newSel.remove(fileItem.path) else newSel.add(fileItem.path)
+                                                    selectedFiles = newSel
+                                                } else {
+                                                    if (fileItem.isDirectory) viewModel.loadDirectory(fileItem.path)
+                                                    else onNavigateToEditor(fileItem.path)
+                                                }
+                                            },
+                                            onLongClick = {
+                                                if (!isSelectionMode) contextMenuFile = fileItem
                                             }
-                                        },
-                                        onLongClick = {
-                                            if (!isSelectionMode) contextMenuFile = fileItem
-                                        }
-                                    )
+                                        )
+                                    }
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(bottom = 88.dp)
+                                ) {
+                                    items(displayFiles, key = { it.path }) { fileItem ->
+                                        val isSelected = selectedFiles.contains(fileItem.path)
+                                        CompactFileRow(
+                                            fileItem = fileItem,
+                                            isSelected = isSelected,
+                                            isSelectionMode = isSelectionMode,
+                                            onClick = {
+                                                if (isSelectionMode) {
+                                                    val newSel = selectedFiles.toMutableSet()
+                                                    if (newSel.contains(fileItem.path)) newSel.remove(fileItem.path) else newSel.add(fileItem.path)
+                                                    selectedFiles = newSel
+                                                } else {
+                                                    if (fileItem.isDirectory) viewModel.loadDirectory(fileItem.path)
+                                                    else onNavigateToEditor(fileItem.path)
+                                                }
+                                            },
+                                            onLongClick = {
+                                                if (!isSelectionMode) contextMenuFile = fileItem
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -364,7 +417,7 @@ fun FileBrowserScreen(
     }
 
     if (showGitDialog) {
-        var token by remember { mutableStateOf("") }
+        var token by remember { mutableStateOf(viewModel.getGitToken()) }
         var isPushing by remember { mutableStateOf(false) }
         var uploadSuccess by remember { mutableStateOf(false) }
         
@@ -399,6 +452,7 @@ fun FileBrowserScreen(
                     TextButton(
                         onClick = { 
                             if (token.isNotBlank()) {
+                                viewModel.updateGitToken(token)
                                 isPushing = true
                             }
                         },
@@ -501,6 +555,59 @@ fun CompactFileRow(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun GridFileRow(
+    fileItem: FileItem, 
+    isSelected: Boolean, 
+    isSelectionMode: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val bgColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha=0.3f) 
+                  else Color.Transparent
+
+    val iconTriple = determinePremiumFileIcon(fileItem.name, fileItem.isDirectory)
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(bgColor)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = iconTriple.first,
+                contentDescription = null,
+                tint = iconTriple.second,
+                modifier = Modifier.size(36.dp)
+            )
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = null,
+                    modifier = Modifier.align(Alignment.TopEnd).size(16.dp).offset(x = 8.dp, y = (-8).dp)
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        Text(
+            text = fileItem.name,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }
+}
+
 fun determinePremiumFileIcon(name: String, isDir: Boolean): Triple<ImageVector, Color, Boolean> {
     if (isDir) return Triple(Icons.Filled.Folder, Color(0xFF007ACC), true) // VS Code Blue
     val ext = name.substringAfterLast('.', "").lowercase()
@@ -570,9 +677,7 @@ fun RightSidebar(
             
             item { Spacer(modifier = Modifier.height(16.dp)) }
             item { SidebarSectionTitle("SOURCE CONTROL") }
-            item { SidebarItem(Icons.Filled.Source, "Repository Status", MaterialTheme.colorScheme.onSurfaceVariant) }
             item { SidebarItem(Icons.Filled.CloudUpload, "Commit & Push (Token auth)", MaterialTheme.colorScheme.onSurfaceVariant, onClick = onGitClick) }
-            item { SidebarItem(Icons.Filled.CallSplit, "Branches", MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
