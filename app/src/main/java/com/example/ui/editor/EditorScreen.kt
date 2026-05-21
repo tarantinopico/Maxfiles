@@ -93,12 +93,6 @@ fun EditorScreen(
                     Icon(Icons.Filled.Save, contentDescription = "Save", tint = SophisticatedPrimary, modifier = Modifier.size(20.dp))
                 }
             }
-            IconButton(onClick = { /* Search */ }) {
-                Icon(Icons.Filled.Search, contentDescription = "Search", tint = SophisticatedTextMuted, modifier = Modifier.size(20.dp))
-            }
-            IconButton(onClick = { /* More */ }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = SophisticatedTextMuted, modifier = Modifier.size(20.dp))
-            }
         }
         
         HorizontalDivider(color = SophisticatedSurfaceVariant, thickness = 1.dp)

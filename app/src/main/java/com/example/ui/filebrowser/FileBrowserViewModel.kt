@@ -9,11 +9,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import androidx.compose.runtime.mutableStateListOf
 
 class FileBrowserViewModel(private val repository: FileRepository) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FileBrowserUiState(currentPath = repository.getRootPath()))
     val uiState: StateFlow<FileBrowserUiState> = _uiState.asStateFlow()
+
+    private val _favorites = MutableStateFlow(repository.getFavorites())
+    val favorites: StateFlow<Set<String>> = _favorites.asStateFlow()
 
     init {
         loadDirectory(repository.getRootPath())
@@ -36,6 +40,14 @@ class FileBrowserViewModel(private val repository: FileRepository) : ViewModel()
         }
     }
 
+    fun reloadCurrentDirectory() {
+        if (_uiState.value.currentPath == "Favorites") {
+            loadFavorites()
+        } else {
+            loadDirectory(_uiState.value.currentPath)
+        }
+    }
+
     private fun generateBreadcrumbs(path: String): List<String> {
         val root = repository.getRootPath()
         if (path == root) return listOf("Internal Storage")
@@ -47,12 +59,77 @@ class FileBrowserViewModel(private val repository: FileRepository) : ViewModel()
 
     fun navigateUp() {
         val currentPath = _uiState.value.currentPath
+        if (currentPath == "Favorites") {
+            loadHome()
+            return
+        }
         if (currentPath != repository.getRootPath()) {
             val parentFile = File(currentPath).parentFile
             if (parentFile != null) {
                 loadDirectory(parentFile.absolutePath)
             }
         }
+    }
+
+    fun createFolder(name: String) {
+        viewModelScope.launch {
+            repository.createFile(_uiState.value.currentPath, name, true)
+            reloadCurrentDirectory()
+        }
+    }
+
+    fun createFile(name: String) {
+        viewModelScope.launch {
+            repository.createFile(_uiState.value.currentPath, name, false)
+            reloadCurrentDirectory()
+        }
+    }
+
+    fun deleteFile(path: String) {
+        viewModelScope.launch {
+            repository.deleteFile(path)
+            reloadCurrentDirectory()
+        }
+    }
+
+    fun renameFile(path: String, newName: String) {
+        viewModelScope.launch {
+            val file = File(path)
+            val newFile = File(file.parentFile, newName)
+            if (!newFile.exists()) {
+               file.renameTo(newFile)
+            }
+            reloadCurrentDirectory()
+        }
+    }
+
+    fun toggleFavorite(path: String) {
+        repository.toggleFavorite(path)
+        _favorites.value = repository.getFavorites()
+    }
+
+    fun loadFavorites() {
+        val rootPath = "Favorites"
+        val favFiles = repository.getFavorites().mapNotNull { 
+            val file = File(it)
+            if (file.exists()) FileItem(file) else null
+        }.sortedWith(compareBy<FileItem> { !it.isDirectory }.thenBy { it.name.lowercase() })
+        
+        _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            currentPath = rootPath,
+            files = favFiles,
+            breadcrumbs = listOf("Favorites"),
+            errorMessage = null
+        )
+    }
+
+    fun loadHome() {
+        loadDirectory(repository.getRootPath())
+    }
+
+    fun loadDownloads() {
+        loadDirectory(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS).absolutePath)
     }
 }
 

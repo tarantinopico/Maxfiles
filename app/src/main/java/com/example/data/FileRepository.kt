@@ -9,9 +9,21 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import android.os.Environment
+
 class FileRepository(private val context: Context) {
-    // Start at internal files dir for reliable preview behavior
-    private val rootDir = context.filesDir
+    private val rootDir = Environment.getExternalStorageDirectory()
+    private val prefs = context.getSharedPreferences("codeflow_prefs", Context.MODE_PRIVATE)
+
+    fun getFavorites(): Set<String> {
+        return prefs.getStringSet("favorites", emptySet()) ?: emptySet()
+    }
+
+    fun toggleFavorite(path: String) {
+        val favs = getFavorites().toMutableSet()
+        if (favs.contains(path)) favs.remove(path) else favs.add(path)
+        prefs.edit().putStringSet("favorites", favs).apply()
+    }
 
     init {
         try {

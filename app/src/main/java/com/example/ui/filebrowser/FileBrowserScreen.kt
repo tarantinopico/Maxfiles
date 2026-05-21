@@ -37,14 +37,22 @@ fun FileBrowserScreen(
     onNavigateToAbout: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val favorites by viewModel.favorites.collectAsState()
     var isRightSidebarOpen by remember { mutableStateOf(false) }
     var contextMenuFile by remember { mutableStateOf<FileItem?>(null) }
     var selectedFiles by remember { mutableStateOf(setOf<String>()) }
     val isSelectionMode = selectedFiles.isNotEmpty()
     
-    // Auto-close selection when folder changes
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf<FileItem?>(null) }
+    var showSearch by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    
+    // Auto-close selection and search when folder changes
     LaunchedEffect(uiState.currentPath) {
         selectedFiles = emptySet()
+        showSearch = false
+        searchQuery = ""
     }
     
     // Close sidebar on back press if open
@@ -72,8 +80,11 @@ fun FileBrowserScreen(
                     Spacer(modifier = Modifier.width(16.dp))
                     Text("${selectedFiles.size} selected", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(modifier = Modifier.weight(1f))
-                    IconButton(onClick = { /* Bulk */ }, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurface)
+                    IconButton(onClick = { 
+                        selectedFiles.forEach { viewModel.deleteFile(it) }
+                        selectedFiles = emptySet()
+                    }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
                     }
                 } else {
                     BreadcrumbPath(
@@ -84,10 +95,10 @@ fun FileBrowserScreen(
                     
                     // Quick Action Icons
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        IconButton(onClick = { /* Search */ }, modifier = Modifier.size(36.dp)) {
+                        IconButton(onClick = { showSearch = !showSearch }, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Filled.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        IconButton(onClick = { /* New File/Folder */ }, modifier = Modifier.size(36.dp)) {
+                        IconButton(onClick = { showCreateDialog = true }, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Filled.Add, contentDescription = "New", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         // Open Right Sidebar Toggle
@@ -101,41 +112,64 @@ fun FileBrowserScreen(
 
             // File List Area
             Box(modifier = Modifier.weight(1f)) {
-                if (uiState.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = MaterialTheme.colorScheme.primary)
-                } else if (!uiState.errorMessage.isNullOrEmpty()) {
-                    Text(
-                        text = uiState.errorMessage ?: "Error",
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                } else if (uiState.files.isEmpty()) {
-                    EmptyFolderView()
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 88.dp)
-                    ) {
-                        items(uiState.files, key = { it.path }) { fileItem ->
-                            val isSelected = selectedFiles.contains(fileItem.path)
-                            CompactFileRow(
-                                fileItem = fileItem,
-                                isSelected = isSelected,
-                                isSelectionMode = isSelectionMode,
-                                onClick = {
-                                    if (isSelectionMode) {
-                                        val newSel = selectedFiles.toMutableSet()
-                                        if (newSel.contains(fileItem.path)) newSel.remove(fileItem.path) else newSel.add(fileItem.path)
-                                        selectedFiles = newSel
-                                    } else {
-                                        if (fileItem.isDirectory) viewModel.loadDirectory(fileItem.path)
-                                        else onNavigateToEditor(fileItem.path)
-                                    }
-                                },
-                                onLongClick = {
-                                    if (!isSelectionMode) contextMenuFile = fileItem
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (showSearch) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("Search here...") },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = { showSearch = false; searchQuery = "" }) {
+                                    Icon(Icons.Filled.Close, contentDescription = "Close search")
                                 }
+                            }
+                        )
+                    }
+
+                    if (uiState.isLoading) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        }
+                    } else if (!uiState.errorMessage.isNullOrEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = uiState.errorMessage ?: "Error",
+                                color = MaterialTheme.colorScheme.error
                             )
+                        }
+                    } else {
+                        val displayFiles = uiState.files.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                        if (displayFiles.isEmpty()) {
+                            EmptyFolderView()
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = 88.dp)
+                            ) {
+                                items(displayFiles, key = { it.path }) { fileItem ->
+                                    val isSelected = selectedFiles.contains(fileItem.path)
+                                    CompactFileRow(
+                                        fileItem = fileItem,
+                                        isSelected = isSelected,
+                                        isSelectionMode = isSelectionMode,
+                                        onClick = {
+                                            if (isSelectionMode) {
+                                                val newSel = selectedFiles.toMutableSet()
+                                                if (newSel.contains(fileItem.path)) newSel.remove(fileItem.path) else newSel.add(fileItem.path)
+                                                selectedFiles = newSel
+                                            } else {
+                                                if (fileItem.isDirectory) viewModel.loadDirectory(fileItem.path)
+                                                else onNavigateToEditor(fileItem.path)
+                                            }
+                                        },
+                                        onLongClick = {
+                                            if (!isSelectionMode) contextMenuFile = fileItem
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -172,6 +206,9 @@ fun FileBrowserScreen(
         ) {
             RightSidebar(
                 width = sidebarWidth,
+                onHomeClick = { isRightSidebarOpen = false; viewModel.loadHome() },
+                onFavoritesClick = { isRightSidebarOpen = false; viewModel.loadFavorites() },
+                onDownloadsClick = { isRightSidebarOpen = false; viewModel.loadDownloads() },
                 onSettingsClick = { isRightSidebarOpen = false; onNavigateToSettings() },
                 onAboutClick = { isRightSidebarOpen = false; onNavigateToAbout() },
                 onClose = { isRightSidebarOpen = false }
@@ -187,11 +224,82 @@ fun FileBrowserScreen(
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
         ) {
-            PremiumFileActionsSheet(file = file, onDismiss = { contextMenuFile = null }, onSelect = {
+            PremiumFileActionsSheet(file = file, isFavorite = favorites.contains(file.path), onDismiss = { contextMenuFile = null }, onSelect = {
                 selectedFiles = setOf(file.path)
                 contextMenuFile = null
-            })
+            }, onDelete = {
+                viewModel.deleteFile(file.path)
+                contextMenuFile = null
+            }, onRename = {
+                showRenameDialog = file
+                contextMenuFile = null
+            }, onToggleFavorite = {
+                viewModel.toggleFavorite(file.path)
+                contextMenuFile = null
+            }, onNavigateToEditor = onNavigateToEditor)
         }
+    }
+
+    if (showCreateDialog) {
+        var newFileName by remember { mutableStateOf("") }
+        var isFolder by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            title = { Text("Create New") },
+            text = {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = !isFolder, onClick = { isFolder = false })
+                        Text("File", modifier = Modifier.padding(start = 8.dp).clickable { isFolder = false })
+                        Spacer(modifier = Modifier.width(16.dp))
+                        RadioButton(selected = isFolder, onClick = { isFolder = true })
+                        Text("Folder", modifier = Modifier.padding(start = 8.dp).clickable { isFolder = true })
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newFileName,
+                        onValueChange = { newFileName = it },
+                        label = { Text("Name") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (newFileName.isNotBlank()) {
+                        if (isFolder) viewModel.createFolder(newFileName)
+                        else viewModel.createFile(newFileName)
+                    }
+                    showCreateDialog = false
+                }) { Text("Create") }
+            },
+            dismissButton = { TextButton(onClick = { showCreateDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    showRenameDialog?.let { fileToRename ->
+        var renameText by remember { mutableStateOf(fileToRename.name) }
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = null },
+            title = { Text("Rename") },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    label = { Text("New Name") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (renameText.isNotBlank() && renameText != fileToRename.name) {
+                        viewModel.renameFile(fileToRename.path, renameText)
+                    }
+                    showRenameDialog = null
+                }) { Text("Rename") }
+            },
+            dismissButton = { TextButton(onClick = { showRenameDialog = null }) { Text("Cancel") } }
+        )
     }
 }
 
@@ -302,7 +410,15 @@ fun EmptyFolderView() {
 }
 
 @Composable
-fun RightSidebar(width: androidx.compose.ui.unit.Dp, onSettingsClick: () -> Unit, onAboutClick: () -> Unit, onClose: () -> Unit) {
+fun RightSidebar(
+    width: androidx.compose.ui.unit.Dp, 
+    onHomeClick: () -> Unit,
+    onFavoritesClick: () -> Unit,
+    onDownloadsClick: () -> Unit,
+    onSettingsClick: () -> Unit, 
+    onAboutClick: () -> Unit, 
+    onClose: () -> Unit
+) {
     Column(
         modifier = Modifier
             .width(width)
@@ -327,16 +443,9 @@ fun RightSidebar(width: androidx.compose.ui.unit.Dp, onSettingsClick: () -> Unit
         
         LazyColumn(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
             item { SidebarSectionTitle("QUICK ACCESS") }
-            item { SidebarItem(Icons.Filled.Home, "Home", Color(0xFF007ACC)) }
-            item { SidebarItem(Icons.Filled.Favorite, "Favorites", Color(0xFFE91E63)) }
-            item { SidebarItem(Icons.Filled.Download, "Downloads", Color(0xFF4CAF50)) }
-            item { SidebarItem(Icons.Filled.Schedule, "Recent", Color(0xFFFF9800)) }
-            
-            item { Spacer(modifier = Modifier.height(16.dp)) }
-            item { SidebarSectionTitle("SOURCE CONTROL") }
-            item { SidebarItem(Icons.Filled.Source, "Repository Status", MaterialTheme.colorScheme.onSurfaceVariant) }
-            item { SidebarItem(Icons.Filled.CloudUpload, "Commit & Push", MaterialTheme.colorScheme.onSurfaceVariant) }
-            item { SidebarItem(Icons.Filled.CallSplit, "Branches", MaterialTheme.colorScheme.onSurfaceVariant) }
+            item { SidebarItem(Icons.Filled.Home, "Home", Color(0xFF007ACC), onClick = onHomeClick) }
+            item { SidebarItem(Icons.Filled.Favorite, "Favorites", Color(0xFFE91E63), onClick = onFavoritesClick) }
+            item { SidebarItem(Icons.Filled.Download, "Downloads", Color(0xFF4CAF50), onClick = onDownloadsClick) }
         }
         
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
@@ -377,7 +486,16 @@ fun SidebarItem(icon: ImageVector, label: String, tint: Color, onClick: () -> Un
 }
 
 @Composable
-fun PremiumFileActionsSheet(file: FileItem, onDismiss: () -> Unit, onSelect: () -> Unit) {
+fun PremiumFileActionsSheet(
+    file: FileItem, 
+    isFavorite: Boolean,
+    onDismiss: () -> Unit, 
+    onSelect: () -> Unit, 
+    onDelete: () -> Unit, 
+    onRename: () -> Unit, 
+    onToggleFavorite: () -> Unit,
+    onNavigateToEditor: ((String) -> Unit)? = null
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -397,6 +515,11 @@ fun PremiumFileActionsSheet(file: FileItem, onDismiss: () -> Unit, onSelect: () 
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
         
         ListItem(
+            headlineContent = { if (isFavorite) Text("Remove from Favorites") else Text("Add to Favorites") },
+            leadingContent = { Icon(if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, contentDescription = null, tint = if (isFavorite) Color(0xFFE91E63) else MaterialTheme.colorScheme.onSurface) },
+            modifier = Modifier.clickable { onToggleFavorite() }
+        )
+        ListItem(
             headlineContent = { Text("Select for Bulk Action") },
             leadingContent = { Icon(Icons.Filled.CheckCircleOutline, contentDescription = null) },
             modifier = Modifier.clickable { onSelect() }
@@ -404,29 +527,22 @@ fun PremiumFileActionsSheet(file: FileItem, onDismiss: () -> Unit, onSelect: () 
         ListItem(
             headlineContent = { Text("Rename") },
             leadingContent = { Icon(Icons.Filled.DriveFileRenameOutline, contentDescription = null) },
-            modifier = Modifier.clickable { onDismiss() }
+            modifier = Modifier.clickable { onRename() }
         )
         if (!file.isDirectory) {
             ListItem(
                 headlineContent = { Text("Open with Editor") },
                 leadingContent = { Icon(Icons.Filled.Code, contentDescription = null) },
-                modifier = Modifier.clickable { onDismiss() }
+                modifier = Modifier.clickable { 
+                   onNavigateToEditor?.invoke(file.path)
+                   onDismiss() 
+                }
             )
         }
         ListItem(
-            headlineContent = { Text("Move or Copy") },
-            leadingContent = { Icon(Icons.Filled.DriveFileMove, contentDescription = null) },
-            modifier = Modifier.clickable { onDismiss() }
-        )
-         ListItem(
-            headlineContent = { Text("Archive (ZIP)") },
-            leadingContent = { Icon(Icons.Filled.FolderZip, contentDescription = null) },
-            modifier = Modifier.clickable { onDismiss() }
-        )
-        ListItem(
             headlineContent = { Text("Delete", color = MaterialTheme.colorScheme.error) },
             leadingContent = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            modifier = Modifier.clickable { onDismiss() }
+            modifier = Modifier.clickable { onDelete() }
         )
     }
 }
