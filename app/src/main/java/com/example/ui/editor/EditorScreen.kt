@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Undo
@@ -87,6 +88,24 @@ fun EditorScreen(
             }
             
             Spacer(modifier = Modifier.weight(1f))
+            
+            IconButton(onClick = { viewModel.undo() }, enabled = uiState.canUndo) {
+                Icon(Icons.Filled.Undo, contentDescription = "Undo", tint = if (uiState.canUndo) SophisticatedText else SophisticatedTextMuted.copy(alpha=0.5f), modifier = Modifier.size(20.dp))
+            }
+            IconButton(onClick = { viewModel.redo() }, enabled = uiState.canRedo) {
+                Icon(Icons.Filled.Redo, contentDescription = "Redo", tint = if (uiState.canRedo) SophisticatedText else SophisticatedTextMuted.copy(alpha=0.5f), modifier = Modifier.size(20.dp))
+            }
+            var expanded by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { expanded = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = SophisticatedTextMuted, modifier = Modifier.size(20.dp))
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    DropdownMenuItem(text = { Text("Find and Replace") }, onClick = { expanded = false })
+                    DropdownMenuItem(text = { Text("Format Document") }, onClick = { expanded = false })
+                    DropdownMenuItem(text = { Text("Go to Line") }, onClick = { expanded = false })
+                }
+            }
             
             if (uiState.hasUnsavedChanges) {
                 IconButton(onClick = { viewModel.saveFile() }) {

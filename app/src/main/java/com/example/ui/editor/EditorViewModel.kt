@@ -13,6 +13,9 @@ class EditorViewModel(private val repository: FileRepository) : ViewModel() {
     private val _uiState = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = _uiState.asStateFlow()
 
+    private val history = mutableListOf<String>()
+    private var historyIndex = -1
+
     fun loadFile(path: String?) {
         if (path == null) {
             _uiState.value = _uiState.value.copy(errorMessage = "No file selected")
@@ -22,10 +25,15 @@ class EditorViewModel(private val repository: FileRepository) : ViewModel() {
             _uiState.value = _uiState.value.copy(isLoading = true, currentPath = path, errorMessage = null)
             val result = repository.readFileContext(path)
             result.onSuccess { content ->
+                history.clear()
+                history.add(content)
+                historyIndex = 0
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     content = content,
-                    fileName = path.substringAfterLast("/")
+                    fileName = path.substringAfterLast("/"),
+                    canUndo = false,
+                    canRedo = false
                 )
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = error.message)
@@ -34,7 +42,46 @@ class EditorViewModel(private val repository: FileRepository) : ViewModel() {
     }
 
     fun updateContent(newContent: String) {
-        _uiState.value = _uiState.value.copy(content = newContent, hasUnsavedChanges = true)
+        if (historyIndex >= 0 && newContent == history[historyIndex]) return
+        
+        if (historyIndex < history.size - 1) {
+            history.subList(historyIndex + 1, history.size).clear()
+        }
+        
+        history.add(newContent)
+        if (history.size > 50) history.removeAt(0)
+        historyIndex = history.size - 1
+        
+        _uiState.value = _uiState.value.copy(
+            content = newContent, 
+            hasUnsavedChanges = true,
+            canUndo = historyIndex > 0,
+            canRedo = false
+        )
+    }
+
+    fun undo() {
+        if (historyIndex > 0) {
+            historyIndex--
+            _uiState.value = _uiState.value.copy(
+                content = history[historyIndex],
+                hasUnsavedChanges = true,
+                canUndo = historyIndex > 0,
+                canRedo = historyIndex < history.size - 1
+            )
+        }
+    }
+
+    fun redo() {
+        if (historyIndex < history.size - 1) {
+            historyIndex++
+            _uiState.value = _uiState.value.copy(
+                content = history[historyIndex],
+                hasUnsavedChanges = true,
+                canUndo = historyIndex > 0,
+                canRedo = historyIndex < history.size - 1
+            )
+        }
     }
 
     fun saveFile() {
@@ -61,5 +108,7 @@ data class EditorUiState(
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
     val hasUnsavedChanges: Boolean = false,
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false,
     val errorMessage: String? = null
 )

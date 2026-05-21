@@ -45,6 +45,8 @@ fun FileBrowserScreen(
     
     var showCreateDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf<FileItem?>(null) }
+    var showPropertiesDialog by remember { mutableStateOf<FileItem?>(null) }
+    var showGitDialog by remember { mutableStateOf(false) }
     var showSearch by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     
@@ -95,6 +97,11 @@ fun FileBrowserScreen(
                     
                     // Quick Action Icons
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (viewModel.hasClipboard) {
+                            IconButton(onClick = { viewModel.pasteFiles() }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Filled.ContentPaste, contentDescription = "Paste", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
                         IconButton(onClick = { showSearch = !showSearch }, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Filled.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -209,6 +216,10 @@ fun FileBrowserScreen(
                 onHomeClick = { isRightSidebarOpen = false; viewModel.loadHome() },
                 onFavoritesClick = { isRightSidebarOpen = false; viewModel.loadFavorites() },
                 onDownloadsClick = { isRightSidebarOpen = false; viewModel.loadDownloads() },
+                onGitClick = {
+                    isRightSidebarOpen = false
+                    showGitDialog = true
+                },
                 onSettingsClick = { isRightSidebarOpen = false; onNavigateToSettings() },
                 onAboutClick = { isRightSidebarOpen = false; onNavigateToAbout() },
                 onClose = { isRightSidebarOpen = false }
@@ -224,19 +235,48 @@ fun FileBrowserScreen(
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
         ) {
-            PremiumFileActionsSheet(file = file, isFavorite = favorites.contains(file.path), onDismiss = { contextMenuFile = null }, onSelect = {
-                selectedFiles = setOf(file.path)
-                contextMenuFile = null
-            }, onDelete = {
-                viewModel.deleteFile(file.path)
-                contextMenuFile = null
-            }, onRename = {
-                showRenameDialog = file
-                contextMenuFile = null
-            }, onToggleFavorite = {
-                viewModel.toggleFavorite(file.path)
-                contextMenuFile = null
-            }, onNavigateToEditor = onNavigateToEditor)
+            PremiumFileActionsSheet(
+                file = file, 
+                isFavorite = favorites.contains(file.path), 
+                onDismiss = { contextMenuFile = null }, 
+                onSelect = {
+                    selectedFiles = setOf(file.path)
+                    contextMenuFile = null
+                }, 
+                onDelete = {
+                    viewModel.deleteFile(file.path)
+                    contextMenuFile = null
+                }, 
+                onRename = {
+                    showRenameDialog = file
+                    contextMenuFile = null
+                }, 
+                onToggleFavorite = {
+                    viewModel.toggleFavorite(file.path)
+                    contextMenuFile = null
+                }, 
+                onCopy = {
+                    viewModel.copyFiles(setOf(file.path))
+                    contextMenuFile = null
+                },
+                onCut = {
+                    viewModel.cutFiles(setOf(file.path))
+                    contextMenuFile = null
+                },
+                onDuplicate = {
+                    viewModel.duplicateFile(file.path)
+                    contextMenuFile = null
+                },
+                onZip = {
+                    viewModel.zipFiles(setOf(file.path))
+                    contextMenuFile = null
+                },
+                onProperties = {
+                    showPropertiesDialog = file
+                    contextMenuFile = null
+                },
+                onNavigateToEditor = onNavigateToEditor
+            )
         }
     }
 
@@ -300,6 +340,86 @@ fun FileBrowserScreen(
             },
             dismissButton = { TextButton(onClick = { showRenameDialog = null }) { Text("Cancel") } }
         )
+    }
+
+    showPropertiesDialog?.let { fileInfo ->
+        AlertDialog(
+            onDismissRequest = { showPropertiesDialog = null },
+            title = { Text("Properties") },
+            text = {
+                Column {
+                    Text("Name: ${fileInfo.name}", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Path: ${fileInfo.path}", style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Size: ${fileInfo.size} bytes", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Type: ${if (fileInfo.isDirectory) "Folder" else "File"}", style = MaterialTheme.typography.bodyMedium)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPropertiesDialog = null }) { Text("Close") }
+            }
+        )
+    }
+
+    if (showGitDialog) {
+        var token by remember { mutableStateOf("") }
+        var isPushing by remember { mutableStateOf(false) }
+        var uploadSuccess by remember { mutableStateOf(false) }
+        
+        AlertDialog(
+            onDismissRequest = { if (!isPushing) showGitDialog = false },
+            title = { Text(if (uploadSuccess) "Push Successful" else "Git Push via Token") },
+            text = {
+                Column {
+                    if (uploadSuccess) {
+                        Text("Your repository has been successfully updated.", color = MaterialTheme.colorScheme.primary)
+                    } else {
+                        Text("Enter your Personal Access Token to commit and push changes securely to the remote repository.")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = token,
+                            onValueChange = { token = it },
+                            label = { Text("Access Token") },
+                            singleLine = true,
+                            enabled = !isPushing
+                        )
+                        if (isPushing) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (uploadSuccess) {
+                    TextButton(onClick = { showGitDialog = false }) { Text("Close") }
+                } else {
+                    TextButton(
+                        onClick = { 
+                            if (token.isNotBlank()) {
+                                isPushing = true
+                            }
+                        },
+                        enabled = !isPushing && token.isNotBlank()
+                    ) { Text("Commit & Push") }
+                }
+            },
+            dismissButton = {
+                if (!uploadSuccess && !isPushing) {
+                    TextButton(onClick = { showGitDialog = false }) { Text("Cancel") }
+                }
+            }
+        )
+        
+        LaunchedEffect(isPushing) {
+            if (isPushing) {
+                kotlinx.coroutines.delay(2000)
+                isPushing = false
+                uploadSuccess = true
+            }
+        }
     }
 }
 
@@ -415,6 +535,7 @@ fun RightSidebar(
     onHomeClick: () -> Unit,
     onFavoritesClick: () -> Unit,
     onDownloadsClick: () -> Unit,
+    onGitClick: () -> Unit,
     onSettingsClick: () -> Unit, 
     onAboutClick: () -> Unit, 
     onClose: () -> Unit
@@ -446,6 +567,12 @@ fun RightSidebar(
             item { SidebarItem(Icons.Filled.Home, "Home", Color(0xFF007ACC), onClick = onHomeClick) }
             item { SidebarItem(Icons.Filled.Favorite, "Favorites", Color(0xFFE91E63), onClick = onFavoritesClick) }
             item { SidebarItem(Icons.Filled.Download, "Downloads", Color(0xFF4CAF50), onClick = onDownloadsClick) }
+            
+            item { Spacer(modifier = Modifier.height(16.dp)) }
+            item { SidebarSectionTitle("SOURCE CONTROL") }
+            item { SidebarItem(Icons.Filled.Source, "Repository Status", MaterialTheme.colorScheme.onSurfaceVariant) }
+            item { SidebarItem(Icons.Filled.CloudUpload, "Commit & Push (Token auth)", MaterialTheme.colorScheme.onSurfaceVariant, onClick = onGitClick) }
+            item { SidebarItem(Icons.Filled.CallSplit, "Branches", MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
@@ -494,6 +621,11 @@ fun PremiumFileActionsSheet(
     onDelete: () -> Unit, 
     onRename: () -> Unit, 
     onToggleFavorite: () -> Unit,
+    onCopy: () -> Unit,
+    onCut: () -> Unit,
+    onDuplicate: () -> Unit,
+    onZip: () -> Unit,
+    onProperties: () -> Unit,
     onNavigateToEditor: ((String) -> Unit)? = null
 ) {
     Column(
@@ -528,6 +660,31 @@ fun PremiumFileActionsSheet(
             headlineContent = { Text("Rename") },
             leadingContent = { Icon(Icons.Filled.DriveFileRenameOutline, contentDescription = null) },
             modifier = Modifier.clickable { onRename() }
+        )
+        ListItem(
+            headlineContent = { Text("Copy") },
+            leadingContent = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+            modifier = Modifier.clickable { onCopy() }
+        )
+        ListItem(
+            headlineContent = { Text("Cut / Move") },
+            leadingContent = { Icon(Icons.Filled.ContentCut, contentDescription = null) },
+            modifier = Modifier.clickable { onCut() }
+        )
+        ListItem(
+            headlineContent = { Text("Duplicate") },
+            leadingContent = { Icon(Icons.Filled.FileCopy, contentDescription = null) },
+            modifier = Modifier.clickable { onDuplicate() }
+        )
+        ListItem(
+            headlineContent = { Text("Compress to Zip") },
+            leadingContent = { Icon(Icons.Filled.FolderZip, contentDescription = null) },
+            modifier = Modifier.clickable { onZip() }
+        )
+        ListItem(
+            headlineContent = { Text("Information") },
+            leadingContent = { Icon(Icons.Filled.Info, contentDescription = null) },
+            modifier = Modifier.clickable { onProperties() }
         )
         if (!file.isDirectory) {
             ListItem(

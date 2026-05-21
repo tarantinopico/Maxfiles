@@ -103,6 +103,48 @@ class FileBrowserViewModel(private val repository: FileRepository) : ViewModel()
         }
     }
 
+    private var clipboardFiles = setOf<String>()
+    private var isMoveOperation = false
+    
+    val hasClipboard: Boolean get() = clipboardFiles.isNotEmpty()
+
+    fun copyFiles(paths: Set<String>) {
+        clipboardFiles = paths
+        isMoveOperation = false
+    }
+
+    fun cutFiles(paths: Set<String>) {
+        clipboardFiles = paths
+        isMoveOperation = true
+    }
+
+    fun pasteFiles() {
+        if (clipboardFiles.isNotEmpty()) {
+            viewModelScope.launch {
+                repository.pasteFiles(clipboardFiles, _uiState.value.currentPath, isMoveOperation)
+                if (isMoveOperation) {
+                    clipboardFiles = emptySet()
+                    isMoveOperation = false
+                }
+                reloadCurrentDirectory()
+            }
+        }
+    }
+
+    fun duplicateFile(path: String) {
+        viewModelScope.launch {
+            repository.duplicateFile(path)
+            reloadCurrentDirectory()
+        }
+    }
+
+    fun zipFiles(paths: Set<String>) {
+        viewModelScope.launch {
+            repository.zipFiles(paths, _uiState.value.currentPath)
+            reloadCurrentDirectory()
+        }
+    }
+
     fun toggleFavorite(path: String) {
         repository.toggleFavorite(path)
         _favorites.value = repository.getFavorites()

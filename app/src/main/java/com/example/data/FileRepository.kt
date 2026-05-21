@@ -87,6 +87,92 @@ class FileRepository(private val context: Context) {
             Result.failure(e)
         }
     }
+
+    suspend fun duplicateFile(path: String): Result<FileItem> = withContext(Dispatchers.IO) {
+        try {
+            val file = File(path)
+            if (!file.exists()) return@withContext Result.failure(Exception("File not found"))
+            
+            val ext = file.extension
+            val nameWithoutExt = file.nameWithoutExtension
+            var newFile = File(file.parentFile, "${nameWithoutExt}_copy${if(ext.isNotEmpty()) ".$ext" else ""}")
+            var counter = 1
+            while (newFile.exists()) {
+                counter++
+                newFile = File(file.parentFile, "${nameWithoutExt}_copy$counter${if(ext.isNotEmpty()) ".$ext" else ""}")
+            }
+            
+            if (file.isDirectory) {
+                file.copyRecursively(newFile, true)
+            } else {
+                file.copyTo(newFile, true)
+            }
+            Result.success(FileItem(newFile))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun pasteFiles(paths: Set<String>, destDir: String, isMove: Boolean): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val dest = File(destDir)
+            if (!dest.exists() || !dest.isDirectory) return@withContext Result.failure(Exception("Invalid destination"))
+            
+            for (path in paths) {
+                val file = File(path)
+                if (file.exists()) {
+                    val destFile = File(dest, file.name)
+                    if (isMove) {
+                        file.renameTo(destFile)
+                    } else {
+                        if (file.isDirectory) file.copyRecursively(destFile, true)
+                        else file.copyTo(destFile, true)
+                    }
+                }
+            }
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun zipFiles(paths: Set<String>, destDir: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val dest = File(destDir, "Archive.zip")
+            var counter = 1
+            var finalDest = dest
+            while (finalDest.exists()) {
+                finalDest = File(destDir, "Archive_$counter.zip")
+                counter++
+            }
+            
+            java.util.zip.ZipOutputStream(java.io.FileOutputStream(finalDest)).use { zos ->
+                for (path in paths) {
+                    val file = File(path)
+                    if (file.exists()) {
+                        if (file.isDirectory) {
+                            file.walkTopDown().forEach { f ->
+                                val zipEntry = java.util.zip.ZipEntry(f.relativeTo(file.parentFile).path + if (f.isDirectory) "/" else "")
+                                zos.putNextEntry(zipEntry)
+                                if (f.isFile) {
+                                    f.inputStream().use { it.copyTo(zos) }
+                                }
+                                zos.closeEntry()
+                            }
+                        } else {
+                            val zipEntry = java.util.zip.ZipEntry(file.name)
+                            zos.putNextEntry(zipEntry)
+                            file.inputStream().use { it.copyTo(zos) }
+                            zos.closeEntry()
+                        }
+                    }
+                }
+            }
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
     
     suspend fun readFileContext(path: String): Result<String> = withContext(Dispatchers.IO) {
         try {
