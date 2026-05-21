@@ -1,0 +1,6 @@
+{
+  "name": "CodeFlow",
+  "description": "Professional file manager and text IDE with Git client.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
