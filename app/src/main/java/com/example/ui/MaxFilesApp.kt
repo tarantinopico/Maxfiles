@@ -32,7 +32,8 @@ fun MaxFilesApp(appContainer: AppContainer) {
                 FileBrowserScreen(
                     viewModel = viewModel(factory = factory), 
                     onNavigateToEditor = { path ->
-                        navController.navigate("${Screen.Editor.route}?path=$path")
+                        val encodedPath = android.net.Uri.encode(path)
+                        navController.navigate("${Screen.Editor.route}?path=$encodedPath")
                     },
                     onNavigateToSettings = {
                         navController.navigate(Screen.Settings.route)
@@ -42,7 +43,13 @@ fun MaxFilesApp(appContainer: AppContainer) {
                     }
                 ) 
             }
-            composable("${Screen.Editor.route}?path={path}") { backStackEntry -> 
+            composable(
+                route = "${Screen.Editor.route}?path={path}",
+                arguments = listOf(androidx.navigation.navArgument("path") { 
+                    type = androidx.navigation.NavType.StringType 
+                    nullable = true 
+                })
+            ) { backStackEntry -> 
                 val path = backStackEntry.arguments?.getString("path")
                 EditorScreen(path, viewModel(factory = factory), onNavigateBack = { navController.popBackStack() }) 
             }
