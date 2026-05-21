@@ -1,19 +1,21 @@
 package com.example.ui.editor
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Undo
-import androidx.compose.material.icons.filled.Redo
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,10 +31,8 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.ui.theme.EditorBackground
-import com.example.ui.theme.EditorLineNumber
+import com.example.ui.theme.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorScreen(
     path: String?,
@@ -40,7 +40,8 @@ fun EditorScreen(
     onNavigateBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val scrollState = rememberScrollState()
+    val verticalScrollState = rememberScrollState()
+    val horizontalScrollState = rememberScrollState()
 
     LaunchedEffect(path) {
         if (uiState.currentPath != path) {
@@ -48,140 +49,144 @@ fun EditorScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                title = { 
-                    Column {
-                        Text(
-                            text = uiState.fileName + if (uiState.hasUnsavedChanges) " (Edited)" else "",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        uiState.currentPath?.let { 
-                            if (it.contains("/")) {
-                                Text(
-                                    text = ".../" + it.split("/").takeLast(2).first(), 
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { /* TODO: Search */ }) {
-                        Icon(Icons.Filled.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    IconButton(onClick = { /* TODO: More Actions */ }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "Options", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground
-                )
-            )
-        },
-        bottomBar = {
-            BottomAppBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.height(48.dp)
-            ) {
+    Column(modifier = Modifier.fillMaxSize().background(EditorBackground)) {
+        // VS Code style custom Tab / Top Bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .background(SophisticatedSurface),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onNavigateBack, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = SophisticatedTextMuted, modifier = Modifier.size(20.dp))
+            }
+            
+            // "Tab"
+            if (uiState.fileName.isNotEmpty()) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .background(EditorBackground) // Active tab color
+                        .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row {
-                        IconButton(onClick = { /* TODO undo */ }) {
-                            Icon(Icons.Filled.Undo, contentDescription = "Undo", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        IconButton(onClick = { /* TODO redo */ }) {
-                            Icon(Icons.Filled.Redo, contentDescription = "Redo", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
                     Text(
-                        text = "UTF-8 • Kotlin",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        text = uiState.fileName,
+                        color = SophisticatedPrimary,
+                        style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Medium
                     )
+                    if (uiState.hasUnsavedChanges) {
+                        Box(modifier = Modifier.padding(start = 8.dp).size(8.dp).background(SophisticatedSecondary, shape = androidx.compose.foundation.shape.CircleShape))
+                    } else {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.Filled.Close, contentDescription = "Close", tint = SophisticatedTextMuted, modifier = Modifier.size(16.dp))
+                    }
                 }
             }
-        },
-        floatingActionButton = {
+            
+            Spacer(modifier = Modifier.weight(1f))
+            
             if (uiState.hasUnsavedChanges) {
-                FloatingActionButton(
-                    onClick = { viewModel.saveFile() },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ) {
-                    Icon(Icons.Filled.Save, contentDescription = "Save")
+                IconButton(onClick = { viewModel.saveFile() }) {
+                    Icon(Icons.Filled.Save, contentDescription = "Save", tint = SophisticatedPrimary, modifier = Modifier.size(20.dp))
                 }
+            }
+            IconButton(onClick = { /* Search */ }) {
+                Icon(Icons.Filled.Search, contentDescription = "Search", tint = SophisticatedTextMuted, modifier = Modifier.size(20.dp))
+            }
+            IconButton(onClick = { /* More */ }) {
+                Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = SophisticatedTextMuted, modifier = Modifier.size(20.dp))
             }
         }
-    ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues).fillMaxSize().background(EditorBackground)) {
-            if (uiState.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else if (uiState.currentPath == null) {
-                Text("No file selected", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.Center))
-            } else {
-                Row(modifier = Modifier.fillMaxWidth().verticalScroll(scrollState)) {
-                    // Line numbers
+        
+        HorizontalDivider(color = SophisticatedSurfaceVariant, thickness = 1.dp)
+
+        if (uiState.isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = SophisticatedPrimary)
+            }
+        } else if (uiState.currentPath == null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No file opened", color = SophisticatedTextMuted)
+            }
+        } else {
+            // Editor Content
+            Box(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(verticalScrollState)
+                ) {
+                    // Line numbers inside the scroll so they stay perfectly in sync
                     val lineCount = uiState.content.count { it == '\n' } + 1
                     Column(
                         modifier = Modifier
-                            .background(MaterialTheme.colorScheme.surface)
+                            .background(SophisticatedSurface)
                             .padding(end = 1.dp) // Border gap
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .background(SophisticatedSurfaceVariant)
                     ) {
                         Column(
                             modifier = Modifier
-                                .background(MaterialTheme.colorScheme.surface)
-                                .padding(horizontal = 8.dp, vertical = 8.dp)
-                                .width(32.dp),
+                                .background(SophisticatedSurface)
+                                .padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
+                                .height(IntrinsicSize.Min),
                             horizontalAlignment = Alignment.End
                         ) {
                             for (i in 1..lineCount) {
                                 Text(
                                     text = i.toString(),
                                     color = EditorLineNumber,
-                                    fontSize = 13.sp,
+                                    fontSize = 14.sp,
                                     fontFamily = FontFamily.Monospace,
-                                    modifier = Modifier.height(20.dp) // Approximate height to match line height
+                                    modifier = Modifier.height(20.dp) // Exact match to BasicTextField line height
                                 )
                             }
                         }
                     }
-                    
-                    // Code Editor
+
+                    // TextField
                     BasicTextField(
                         value = uiState.content,
                         onValueChange = { viewModel.updateContent(it) },
                         textStyle = TextStyle(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 13.sp,
+                            color = SophisticatedText,
+                            fontSize = 14.sp,
                             fontFamily = FontFamily.Monospace,
                             lineHeight = 20.sp
                         ),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        cursorBrush = SolidColor(SophisticatedPrimary),
                         visualTransformation = SyntaxHighlightTransformation(),
                         modifier = Modifier
                             .weight(1f)
-                            .padding(8.dp)
+                            .background(EditorBackground)
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .horizontalScroll(horizontalScrollState) // Allow long lines
                     )
                 }
             }
-            if (uiState.isSaving) {
-                LinearProgressIndicator(modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth())
+
+            // VS Code style Bottom Status Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(24.dp)
+                    .background(SophisticatedPrimary.copy(alpha = 0.8f))
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Close, contentDescription = "Errors", tint = SophisticatedOnPrimary, modifier = Modifier.size(12.dp))
+                    Text(" 0 ", style = MaterialTheme.typography.labelSmall, color = SophisticatedOnPrimary, fontSize = 10.sp)
+                }
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val lang = uiState.fileName.substringAfterLast('.', "").uppercase().takeIf { it.isNotEmpty() } ?: "TXT"
+                    Text("UTF-8", style = MaterialTheme.typography.labelSmall, color = SophisticatedOnPrimary, fontSize = 10.sp, modifier = Modifier.padding(end = 16.dp))
+                    Text(lang, style = MaterialTheme.typography.labelSmall, color = SophisticatedOnPrimary, fontSize = 10.sp)
+                }
             }
         }
     }
@@ -189,44 +194,34 @@ fun EditorScreen(
 
 class SyntaxHighlightTransformation : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
-        return TransformedText(
-            highlightSyntax(text.text),
-            OffsetMapping.Identity
-        )
-    }
-
-    private fun highlightSyntax(text: String): AnnotatedString {
-        return buildAnnotatedString {
-            append(text)
+        val annotatedString = buildAnnotatedString {
+            append(text.text)
             
-            // Simple keyword matching for demo purposes
-            val keywords = listOf("val", "var", "fun", "class", "interface", "object", "return", "if", "else", "true", "false", "for", "while", "import", "package")
-            val colors = mapOf(
-                "keyword" to Color(0xFFCFBCFF), 
-                "string" to Color(0xFF10B981),
-                "number" to Color(0xFFF59E0B),
-                "comment" to Color(0xFF6B7280)
-            )
-
-            // Extremely basic regex mapping - in real app use a proper lexer
-            val wordRegex = "\\b(\\w+)\\b".toRegex()
-            wordRegex.findAll(text).forEach { result ->
-                if (keywords.contains(result.value)) {
-                    addStyle(SpanStyle(color = colors["keyword"]!!, fontWeight = FontWeight.Bold), result.range.first, result.range.last + 1)
-                } else if (result.value.matches("\\d+".toRegex())) {
-                    addStyle(SpanStyle(color = colors["number"]!!), result.range.first, result.range.last + 1)
-                }
+            // Very basic Regex regex for demo premium look
+            // Keywords
+            val keywordPattern = "\\b(fun|val|var|class|interface|object|if|else|when|return|true|false|null|import|package)\\b".toRegex()
+            keywordPattern.findAll(text.text).forEach { result ->
+                addStyle(SpanStyle(color = SophisticatedPrimary), result.range.first, result.range.last + 1)
             }
             
-            val stringRegex = "\".*?\"".toRegex()
-            stringRegex.findAll(text).forEach { result ->
-                addStyle(SpanStyle(color = colors["string"]!!), result.range.first, result.range.last + 1)
+            // Strings
+            val stringPattern = "\".*?\"".toRegex()
+            stringPattern.findAll(text.text).forEach { result ->
+                addStyle(SpanStyle(color = Color(0xFFCE9178)), result.range.first, result.range.last + 1) // VS Code Orange String Color
             }
             
-            val commentRegex = "//.*".toRegex()
-            commentRegex.findAll(text).forEach { result ->
-                addStyle(SpanStyle(color = colors["comment"]!!), result.range.first, result.range.last + 1)
+            // Annotations
+            val annotationPattern = "@[a-zA-Z_0-9]+".toRegex()
+            annotationPattern.findAll(text.text).forEach { result ->
+                addStyle(SpanStyle(color = Color(0xFFDCDCAA)), result.range.first, result.range.last + 1) // VS Code Yellow Function/Annotation Color
+            }
+            
+            // Comments (Basic single line) //
+            val commentPattern = "//.*".toRegex()
+            commentPattern.findAll(text.text).forEach { result ->
+                addStyle(SpanStyle(color = Color(0xFF6A9955)), result.range.first, result.range.last + 1) // VS Code Green Comment
             }
         }
+        return TransformedText(annotatedString, OffsetMapping.Identity)
     }
 }
