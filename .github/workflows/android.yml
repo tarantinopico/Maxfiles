@@ -1,0 +1,39 @@
+name: Mobilni Kompilace APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Stahnuti kodu
+      uses: actions/checkout@v4
+
+    - name: Nastaveni Javy
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    # Tohle rozkóduje tvůj existující soubor v repozitáři do formátu, který Gradle potřebuje
+    - name: Rozkodovani klice pro uspesny build
+      run: base64 -d debug.keystore.base64 > debug.keystore
+
+    - name: Generovani Gradle Wrapperu
+      run: gradle wrapper
+
+    - name: Pravomoci pro Gradle
+      run: chmod +x gradlew
+
+    - name: Kompilace APK
+      run: ./gradlew assembleDebug
+
+    - name: Nahrat hotove APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: Hotove-APK-z-mobilu
+        path: "**/build/outputs/apk/debug/*.apk"

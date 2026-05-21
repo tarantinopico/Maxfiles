@@ -191,14 +191,14 @@ fun FileBrowserScreen(
         }
     }
     
-    if (contextMenuFile != null) {
+    contextMenuFile?.let { file ->
         ModalBottomSheet(
             onDismissRequest = { contextMenuFile = null },
             containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
         ) {
-            FileActionsSheet(file = contextMenuFile!!, onDismiss = { contextMenuFile = null }, onSelect = {
-                selectedFiles = setOf(contextMenuFile!!.path)
+            FileActionsSheet(file = file, onDismiss = { contextMenuFile = null }, onSelect = {
+                selectedFiles = setOf(file.path)
                 contextMenuFile = null
             })
         }

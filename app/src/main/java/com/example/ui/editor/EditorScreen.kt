@@ -134,16 +134,18 @@ fun EditorScreen(
             } else if (uiState.currentPath == null) {
                 Text("No file selected", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.Center))
             } else {
-                Row(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
+                Row(modifier = Modifier.fillMaxWidth().verticalScroll(scrollState)) {
                     // Line numbers
                     val lineCount = uiState.content.count { it == '\n' } + 1
-                    Row(
+                    Column(
                         modifier = Modifier
                             .background(MaterialTheme.colorScheme.surface)
-                            .fillMaxHeight()
+                            .padding(end = 1.dp) // Border gap
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         Column(
                             modifier = Modifier
+                                .background(MaterialTheme.colorScheme.surface)
                                 .padding(horizontal = 8.dp, vertical = 8.dp)
                                 .width(32.dp),
                             horizontalAlignment = Alignment.End
@@ -158,7 +160,6 @@ fun EditorScreen(
                                 )
                             }
                         }
-                        Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceVariant))
                     }
                     
                     // Code Editor
@@ -174,7 +175,7 @@ fun EditorScreen(
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         visualTransformation = SyntaxHighlightTransformation(),
                         modifier = Modifier
-                            .fillMaxSize()
+                            .weight(1f)
                             .padding(8.dp)
                     )
                 }

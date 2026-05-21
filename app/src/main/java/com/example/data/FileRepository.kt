@@ -14,14 +14,20 @@ class FileRepository(private val context: Context) {
     private val rootDir = context.filesDir
 
     init {
-        // Create some sample data if empty so the UI doesn't look barren
-        if (rootDir.listFiles()?.isEmpty() == true) {
-            val docs = File(rootDir, "Documents").apply { mkdir() }
-            val src = File(rootDir, "NexusEngine").apply { mkdir() }
-            
-            File(docs, "README.md").writeText("# CodeFlow\n\nWelcome to your new premium file manager and editor.")
-            File(src, "main.kt").writeText("fun main() {\n    println(\"Initializing CodeFlow engine...\")\n}")
-            File(src, "config.json").writeText("{\n  \"theme\": \"SophisticatedDark\",\n  \"git_enabled\": true\n}")
+        try {
+            // Create some sample data if empty so the UI doesn't look barren
+            if (rootDir.listFiles()?.isEmpty() == true) {
+                val docs = File(rootDir, "Documents").apply { mkdirs() }
+                val src = File(rootDir, "NexusEngine").apply { mkdirs() }
+                
+                if (docs.exists()) File(docs, "README.md").writeText("# CodeFlow\n\nWelcome to your new premium file manager and editor.")
+                if (src.exists()) {
+                    File(src, "main.kt").writeText("fun main() {\n    println(\"Initializing CodeFlow engine...\")\n}")
+                    File(src, "config.json").writeText("{\n  \"theme\": \"SophisticatedDark\",\n  \"git_enabled\": true\n}")
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace() // Protect against IO/Permissions crash on startup
         }
     }
 
